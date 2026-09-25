@@ -1,3 +1,4 @@
+import mimetypes
 from pathlib import Path
 
 
@@ -6,6 +7,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaFileUpload
 
 # Allows the application to read and write files in Google Drive.
 SCOPES = ["https://www.googleapis.com/auth/drive"]
@@ -376,4 +378,93 @@ def process_drive_file(
             file_id,
             output_path
         )
-    
+
+def get_or_create_output_folder(
+    service,
+    folder_name="Document Intelligence Outputs"
+):
+    """
+    Find the output folder in Google Drive.
+    Create it if it does not exist.
+    """
+
+    query = (
+        f"name = '{folder_name}' "
+        "and mimeType = 'application/vnd.google-apps.folder' "
+        "and trashed = false"
+    )
+
+    response = service.files().list(
+        q=query,
+        spaces="drive",
+        fields="files(id,name)"
+    ).execute()
+
+    folders = response.get("files", [])
+
+    if folders:
+        return folders[0]["id"]
+
+    folder_metadata = {
+        "name": folder_name,
+        "mimeType": "application/vnd.google-apps.folder"
+    }
+
+    folder = service.files().create(
+        body=folder_metadata,
+        fields="id,name"
+    ).execute()
+
+    print(
+        f"Created Drive output folder: "
+        f"{folder['name']}"
+    )
+
+    return folder["id"]
+
+
+def upload_file_to_drive(
+    service,
+    local_file_path,
+    folder_id
+):
+    """
+    Upload a local file to a Google Drive folder.
+    """
+
+    local_file_path = Path(local_file_path)
+
+    if not local_file_path.exists():
+        raise FileNotFoundError(
+            f"File not found: {local_file_path}"
+        )
+
+    mime_type = (
+        mimetypes.guess_type(
+            local_file_path.name
+        )[0]
+        or "application/octet-stream"
+    )
+
+    file_metadata = {
+        "name": local_file_path.name,
+        "parents": [folder_id]
+    }
+
+    media = MediaFileUpload(
+        str(local_file_path),
+        mimetype=mime_type,
+        resumable=True
+    )
+
+    uploaded_file = service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id,name,mimeType,size,webViewLink"
+    ).execute()
+
+    print(
+        f"Uploaded: {uploaded_file['name']}"
+    )
+
+    return uploaded_file
