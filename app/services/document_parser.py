@@ -1,6 +1,7 @@
 from pathlib import Path
 import re
 
+from pptx import Presentation
 from pypdf import PdfReader
 from docx import Document
 import pandas as pd
@@ -301,6 +302,171 @@ def parse_xlsx(file_path):
 
     return "\n".join(content)
 
+def parse_csv(file_path):
+    """Extract data from a CSV file."""
+
+    dataframe = pd.read_csv(file_path)
+
+    return dataframe.to_string(index=False)
+
+def parse_pptx(file_path):
+    """Extract text and tables from a PowerPoint presentation."""
+
+    presentation = Presentation(file_path)
+
+    content = []
+
+    for slide_number, slide in enumerate(
+        presentation.slides,
+        start=1
+    ):
+
+        for shape in slide.shapes:
+
+            # Tables
+            if shape.has_table:
+
+                rows = []
+
+                for row in shape.table.rows:
+
+                    row_data = []
+
+                    for cell in row.cells:
+                        row_data.append(
+                            cell.text.strip()
+                        )
+
+                    rows.append(row_data)
+
+                content.append({
+                    "type": "table",
+                    "page": slide_number,
+                    "rows": rows
+                })
+
+            # Text
+            elif hasattr(shape, "text"):
+
+                text = shape.text.strip()
+
+                if not text:
+                    continue
+
+                # Treat slide titles as headings
+                if (
+                    shape.is_placeholder
+                    and shape.placeholder_format.type == 1
+                ):
+                    content.append({
+                        "type": "heading",
+                        "page": slide_number,
+                        "text": text
+                    })
+
+                else:
+                    content.append({
+                        "type": "paragraph",
+                        "page": slide_number,
+                        "text": text
+                    })
+
+    return content
+
+def parse_image(file_path):
+    """Extract text from an image using OCR."""
+
+    image = Image.open(file_path)
+
+    processed_image = preprocess_ocr_image(
+        image
+    )
+
+    ocr_data = pytesseract.image_to_data(
+        processed_image,
+        config="--psm 6",
+        output_type=pytesseract.Output.DICT
+    )
+
+    ocr_words = []
+    confidence_values = []
+    low_confidence_words = []
+
+    for i in range(len(ocr_data["text"])):
+
+        word = ocr_data["text"][i].strip()
+
+        if not word:
+            continue
+
+        try:
+            confidence = float(
+                ocr_data["conf"][i]
+            )
+        except (ValueError, TypeError):
+            confidence = -1
+
+        ocr_words.append(word)
+
+        if confidence >= 0:
+
+            confidence_values.append(
+                confidence
+            )
+
+            if (
+                confidence < 60
+                and len(word) >= 3
+                and re.search(r"[A-Za-z]", word)
+            ):
+
+                low_confidence_words.append({
+                    "word": word,
+                    "confidence": round(
+                        confidence,
+                        2
+                    ),
+                    "type": classify_ocr_token(
+                        word
+                    )
+                })
+
+    if confidence_values:
+
+        average_confidence = (
+            sum(confidence_values)
+            / len(confidence_values)
+        )
+
+    else:
+
+        average_confidence = 0
+
+    if average_confidence >= 85:
+        confidence_status = "HIGH"
+
+    elif average_confidence >= 60:
+        confidence_status = "MEDIUM"
+
+    else:
+        confidence_status = "LOW"
+
+    ocr_text = " ".join(ocr_words)
+
+    return [{
+        "type": "ocr_text",
+        "page": 1,
+        "content": ocr_text,
+        "average_confidence": round(
+            average_confidence,
+            2
+        ),
+        "confidence_status": confidence_status,
+        "low_confidence_words": low_confidence_words
+    }]
+
+
+
 
 def parse_document(file_path):
     """Detect the file type and extract its content."""
@@ -317,9 +483,17 @@ def parse_document(file_path):
 
     elif extension == ".txt":
         return parse_txt(file_path)
-
     elif extension in [".xlsx", ".xls"]:
         return parse_xlsx(file_path)
+
+    elif extension == ".csv":
+        return parse_csv(file_path)
+
+    elif extension == ".pptx":
+        return parse_pptx(file_path)
+
+    elif extension in [".png", ".jpg", ".jpeg"]:
+        return parse_image(file_path)
 
     else:
         raise ValueError(

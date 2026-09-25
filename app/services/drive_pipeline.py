@@ -136,12 +136,6 @@ def run_drive_pipeline():
     # 7. Get/create Drive output folder
     # -------------------------------------------------
 
-    print("\n5. Preparing Google Drive output folder...")
-
-    output_folder_id = get_or_create_output_folder(
-        service
-    )
-
     print(
         f"Output folder ID: "
         f"{output_folder_id}\n"
