@@ -203,20 +203,36 @@ def export_google_doc(service, file_id, destination_path):
 
     return destination_path
 
-def list_supported_files(service, page_size=50):
+def list_supported_files(
+    service,
+    page_size=50,
+    exclude_folder_id=None
+):
     """
-    Find supported files in Google Drive.
+    Find supported source files in Google Drive.
 
-    Folders and unsupported file types are ignored.
+    Files inside the output folder can be excluded so that
+    generated results are not processed again.
     """
+
+    query_parts = [
+        "trashed = false"
+    ]
+
+    if exclude_folder_id:
+        query_parts.append(
+            f"not '{exclude_folder_id}' in parents"
+        )
+
+    query = " and ".join(query_parts)
 
     response = service.files().list(
-        q="trashed = false",
+        q=query,
         pageSize=page_size,
         orderBy="modifiedTime desc",
         fields=(
             "nextPageToken,"
-            "files(id,name,mimeType,size,modifiedTime)"
+            "files(id,name,mimeType,size,modifiedTime,parents)"
         )
     ).execute()
 
