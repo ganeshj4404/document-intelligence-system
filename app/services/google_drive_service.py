@@ -203,71 +203,89 @@ def export_google_doc(service, file_id, destination_path):
 
     return destination_path
 
-def list_supported_files(
-    service,
-    page_size=50,
-    exclude_folder_id=None
-):
+def get_all_descendant_folder_ids(service, root_folder_id):
     """
-    Find supported source files in Google Drive.
-
-    Files inside the output folder can be excluded so that
-    generated results are not processed again.
+    Find the root folder and all subfolders inside it.
+    This allows us to exclude the complete output folder tree.
     """
 
-    query_parts = [
-        "trashed = false"
-    ]
+    folder_ids = {root_folder_id}
+    folders_to_check = [root_folder_id]
+
+    while folders_to_check:
+        current_folder_id = folders_to_check.pop()
+
+        query = (
+            f"'{current_folder_id}' in parents "
+            f"and mimeType = 'application/vnd.google-apps.folder' "
+            f"and trashed = false"
+        )
+
+        response = service.files().list(
+            q=query,
+            fields="files(id,name)"
+        ).execute()
+
+        for folder in response.get("files", []):
+            folder_id = folder["id"]
+
+            if folder_id not in folder_ids:
+                folder_ids.add(folder_id)
+                folders_to_check.append(folder_id)
+
+    return folder_ids
+
+def list_supported_files(service, page_size=100, exclude_folder_id=None):
+    """
+    Find supported source documents while excluding the entire
+    output folder and all of its subfolders.
+    """
+
+    excluded_folder_ids = set()
 
     if exclude_folder_id:
-        query_parts.append(
-            f"not '{exclude_folder_id}' in parents"
+        excluded_folder_ids = get_all_descendant_folder_ids(
+            service,
+            exclude_folder_id
         )
-
-    query = " and ".join(query_parts)
 
     response = service.files().list(
-        q=query,
+        q="trashed = false",
         pageSize=page_size,
-        orderBy="modifiedTime desc",
-        fields=(
-            "nextPageToken,"
-            "files(id,name,mimeType,size,modifiedTime,parents)"
-        )
+        fields="files(id,name,mimeType,size,parents,webViewLink)"
     ).execute()
 
-    all_files = response.get("files", [])
+    files = []
 
-    supported_files = []
+    for file in response.get("files", []):
 
-    for file in all_files:
+        # Ignore folders
+        if file.get("mimeType") == "application/vnd.google-apps.folder":
+            continue
+
+        # Ignore files located anywhere inside the output folder tree
+        parents = file.get("parents", [])
+
+        if any(parent_id in excluded_folder_ids for parent_id in parents):
+            continue
 
         name = file.get("name", "")
         mime_type = file.get("mimeType", "")
 
-        # Ignore folders
-        if mime_type == "application/vnd.google-apps.folder":
-            continue
+        supported = (
+            Path(name).suffix.lower() in SUPPORTED_EXTENSIONS
+            or mime_type in {
+                "application/vnd.google-apps.document",
+                "application/vnd.google-apps.spreadsheet",
+                "application/vnd.google-apps.presentation",
+            }
+        )
 
-        extension = Path(name).suffix.lower()
+        if supported:
+            files.append(file)
 
-        # Normal uploaded files
-        if extension in SUPPORTED_EXTENSIONS:
-            supported_files.append(file)
+    return files
 
-        # Google Docs
-        elif mime_type == "application/vnd.google-apps.document":
-            supported_files.append(file)
-
-        # Google Sheets
-        elif mime_type == "application/vnd.google-apps.spreadsheet":
-            supported_files.append(file)
-
-        # Google Slides
-        elif mime_type == "application/vnd.google-apps.presentation":
-            supported_files.append(file)
-
-    return supported_files
 
 def export_google_workspace_file(
     service,
@@ -438,6 +456,51 @@ def get_or_create_output_folder(
 
     return folder["id"]
 
+def get_or_create_subfolder(
+    service,
+    parent_folder_id,
+    folder_name
+):
+    """
+    Find or create a subfolder inside a parent Drive folder.
+    """
+
+    query = (
+        f"name = '{folder_name}' "
+        "and mimeType = 'application/vnd.google-apps.folder' "
+        f"and '{parent_folder_id}' in parents "
+        "and trashed = false"
+    )
+
+    response = service.files().list(
+        q=query,
+        spaces="drive",
+        fields="files(id,name)"
+    ).execute()
+
+    folders = response.get("files", [])
+
+    if folders:
+        return folders[0]["id"]
+
+    folder_metadata = {
+        "name": folder_name,
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": [parent_folder_id]
+    }
+
+    folder = service.files().create(
+        body=folder_metadata,
+        fields="id,name"
+    ).execute()
+
+    print(
+        f"Created Drive subfolder: "
+        f"{folder['name']}"
+    )
+
+    return folder["id"]
+
 
 def upload_file_to_drive(
     service,
@@ -479,8 +542,25 @@ def upload_file_to_drive(
         fields="id,name,mimeType,size,webViewLink"
     ).execute()
 
-    print(
-        f"Uploaded: {uploaded_file['name']}"
+    return uploaded_file
+
+def delete_existing_file(service, folder_id, file_name):
+    query = (
+        f"'{folder_id}' in parents "
+        f"and name = '{file_name}' "
+        f"and trashed = false"
     )
 
-    return uploaded_file
+    response = service.files().list(
+        q=query,
+        fields="files(id,name)"
+    ).execute()
+
+    existing_files = response.get("files", [])
+
+    for file in existing_files:
+        service.files().delete(
+            fileId=file["id"]
+        ).execute()
+
+        print(f"Replaced existing file: {file['name']}")

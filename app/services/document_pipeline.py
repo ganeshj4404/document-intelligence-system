@@ -135,14 +135,28 @@ def process_document(file_path):
         )
 
     # -------------------------------------------------
-    # 5. Full-document TTS
+    # 5. Prepare output directory
+    # -------------------------------------------------
+
+    output_directory = (
+        Path("data/processed")
+        / file_path.stem
+    )
+
+    output_directory.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    # -------------------------------------------------
+    # 6. Full-document TTS
     # -------------------------------------------------
 
     print("5. Generating full-document audio...")
 
     audio_path = (
-        Path("data/audio")
-        / f"{file_path.stem}_full_document.mp3"
+        output_directory
+        / "full_document.mp3"
     )
 
     generate_speech(
@@ -201,22 +215,16 @@ def process_document(file_path):
         combined_summary
     )
 
-    # -------------------------------------------------
-    # 10. Save outputs
-    # -------------------------------------------------
-
     print("10. Saving outputs...")
 
     summary_path = save_text(
         combined_summary,
-        Path("data/summaries")
-        / f"{file_path.stem}_summary.txt"
+        output_directory / "summary.txt"
     )
 
     paraphrase_path = save_text(
         paraphrased,
-        Path("data/paraphrased")
-        / f"{file_path.stem}_paraphrased.txt"
+        output_directory / "paraphrased.txt"
     )
 
     print("\n===== PIPELINE COMPLETE =====")

@@ -5,40 +5,32 @@ from app.services.google_drive_service import (
     list_supported_files,
     process_drive_file,
     get_or_create_output_folder,
+    get_or_create_subfolder,
     upload_file_to_drive,
+    delete_existing_file,
 )
 
 from app.services.document_pipeline import process_document
 
 
 def run_drive_pipeline():
-    """
-    Find a supported document in Google Drive,
-    process it, and upload the generated outputs
-    back to Google Drive.
-    """
 
     print("===== DOCUMENT INTELLIGENCE DRIVE PIPELINE =====\n")
 
-    # -------------------------------------------------
     # 1. Connect to Google Drive
-    # -------------------------------------------------
-
     print("1. Connecting to Google Drive...")
 
     service = get_drive_service()
 
     print("Google Drive connected.\n")
 
-    # -------------------------------------------------
-    # 2. Find supported documents
-    # -------------------------------------------------
-
-    print("2. Finding supported documents...")
-
+    # 2. Get the output folder
     output_folder_id = get_or_create_output_folder(
-    service
-)
+        service
+    )
+
+    # 3. Find supported documents
+    print("2. Finding supported documents...")
 
     files = list_supported_files(
         service,
@@ -103,7 +95,12 @@ def run_drive_pipeline():
     print(
         f"\nSelected document: {file_name}"
     )
-
+    # Create a folder specifically for this document
+    document_folder_id = get_or_create_subfolder(
+        service,
+        output_folder_id,
+        Path(file_name).stem
+    )
     # -------------------------------------------------
     # 5. Download / export
     # -------------------------------------------------
@@ -145,7 +142,7 @@ def run_drive_pipeline():
     # 8. Upload generated outputs
     # -------------------------------------------------
 
-    print("6. Uploading generated outputs...\n")
+    print("\n6. Uploading generated outputs...\n")
 
     output_files = [
         result["summary_path"],
@@ -157,13 +154,23 @@ def run_drive_pipeline():
 
     for output_file in output_files:
 
+        output_file_name = Path(output_file).name
+
+        delete_existing_file(
+            service,
+            document_folder_id,
+            output_file_name,
+        )
+
         uploaded = upload_file_to_drive(
             service,
             output_file,
-            output_folder_id
+            document_folder_id,
         )
 
         uploaded_files.append(uploaded)
+
+        print(f"Uploaded: {uploaded['name']}")
 
     # -------------------------------------------------
     # 9. Display results
