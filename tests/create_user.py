@@ -1,9 +1,17 @@
+from getpass import getpass
+
 from app.database import create_user
 from app.services.auth_service import hash_password
 
 
-username = "admin"
-password = "Admin@123"
+username = input("Enter username: ").strip()
+password = getpass("Enter password: ")
+
+if not username:
+    raise ValueError("Username cannot be empty.")
+
+if not password:
+    raise ValueError("Password cannot be empty.")
 
 password_hash = hash_password(password)
 
