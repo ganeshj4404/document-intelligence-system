@@ -148,6 +148,7 @@ def run_drive_pipeline():
         result["summary_path"],
         result["paraphrase_path"],
         result["audio_path"],
+        result["summary_audio_path"]
     ]
 
     uploaded_files = []

@@ -41,6 +41,7 @@ def init_db():
             validation_status TEXT,
             summary_validation_status TEXT,
             summary_path TEXT,
+            summary_audio_path TEXT,
             paraphrase_path TEXT,
             audio_path TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -49,8 +50,19 @@ def init_db():
         """
     )
 
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     connection.commit()
     connection.close()
+
+    add_summary_audio_column()
 
 
 def create_document(
@@ -95,6 +107,7 @@ def update_document(
     validation_status=None,
     summary_validation_status=None,
     summary_path=None,
+    summary_audio_path=None,
     paraphrase_path=None,
     audio_path=None
 ):
@@ -112,6 +125,7 @@ def update_document(
             validation_status = COALESCE(?, validation_status),
             summary_validation_status = COALESCE(?, summary_validation_status),
             summary_path = COALESCE(?, summary_path),
+            summary_audio_path = ?,
             paraphrase_path = COALESCE(?, paraphrase_path),
             audio_path = COALESCE(?, audio_path),
             processed_at = CASE
@@ -126,6 +140,7 @@ def update_document(
             validation_status,
             summary_validation_status,
             summary_path,
+            summary_audio_path,
             paraphrase_path,
             audio_path,
             status,
@@ -202,3 +217,53 @@ def delete_document(document_id):
     connection.close()
 
     return deleted
+
+def create_user(username, password_hash):
+    connection = get_connection()
+
+    cursor = connection.execute(
+        """
+        INSERT INTO users (username, password_hash)
+        VALUES (?, ?)
+        """,
+        (username, password_hash)
+    )
+
+    connection.commit()
+    user_id = cursor.lastrowid
+    connection.close()
+
+    return user_id
+
+
+def get_user_by_username(username):
+    connection = get_connection()
+
+    row = connection.execute(
+        """
+        SELECT * FROM users
+        WHERE username = ?
+        """,
+        (username,)
+    ).fetchone()
+
+    connection.close()
+
+    return dict(row) if row else None
+
+def add_summary_audio_column():
+    connection = get_connection()
+
+    columns = connection.execute(
+        "PRAGMA table_info(documents)"
+    ).fetchall()
+
+    column_names = [column["name"] for column in columns]
+
+    if "summary_audio_path" not in column_names:
+        connection.execute(
+            "ALTER TABLE documents ADD COLUMN summary_audio_path TEXT"
+        )
+        connection.commit()
+
+    connection.close()

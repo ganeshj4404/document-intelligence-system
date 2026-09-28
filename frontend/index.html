@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Document Intelligence System</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>Document Intelligence System</h1>
+
+        <p class="subtitle">
+            Upload, process, summarize and manage your documents.
+        </p>
+
+        <!-- Login -->
+        <section id="login-section" class="card">
+
+            <h2>Login</h2>
+
+            <form id="login-form">
+
+                <label for="username">Username</label>
+
+                <input
+                    type="text"
+                    id="username"
+                    placeholder="Enter username"
+                    required
+                >
+
+                <label for="password">Password</label>
+
+                <input
+                    type="password"
+                    id="password"
+                    placeholder="Enter password"
+                    required
+                >
+
+                <button type="submit">
+                    Login
+                </button>
+
+            </form>
+
+            <p id="login-message"></p>
+
+        </section>
+
+
+        <!-- Dashboard -->
+        <section id="dashboard-section" class="hidden">
+
+            <div class="dashboard-header">
+
+                <h2>Dashboard</h2>
+
+                <button id="logout-button">
+                    Logout
+                </button>
+
+            </div>
+
+
+            <!-- Upload -->
+            <div class="card">
+
+                <h3>Upload Document</h3>
+
+                <input
+                    type="file"
+                    id="document-file"
+                >
+
+                <button id="upload-button">
+                    Upload & Process
+                </button>
+
+                <p id="upload-message"></p>
+
+            </div>
+            <div id="result-section" class="card hidden">
+
+                <h3 id="result-title"></h3>
+
+                <div id="result-content"></div>
+
+            </div>
+
+
+            <!-- Documents -->
+            <div class="card">
+
+                <h3>Documents</h3>
+
+                <button id="refresh-button">
+                    Refresh Documents
+                </button>
+
+                <div id="documents-list"></div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+
+    <script src="/static/app.js"></script>
+
+</body>
+</html>

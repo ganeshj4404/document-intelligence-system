@@ -215,7 +215,24 @@ def process_document(file_path):
         combined_summary
     )
 
-    print("10. Saving outputs...")
+    # -------------------------------------------------
+    # 10. Summary TTS
+    # -------------------------------------------------
+
+    print("10. Generating summary audio...")
+
+    summary_audio_path = (
+        output_directory
+        / "summary.mp3"
+    )
+
+    generate_speech(
+        combined_summary,
+        summary_audio_path,
+        rate="+15%"
+    )
+
+    print("11. Saving outputs...")
 
     summary_path = save_text(
         combined_summary,
@@ -238,6 +255,7 @@ def process_document(file_path):
         "summary_validation": summary_validation,
         "paraphrase": paraphrased,
         "audio_path": str(audio_path),
+        "summary_audio_path": str(summary_audio_path),
         "summary_path": str(summary_path),
         "paraphrase_path": str(paraphrase_path)
     }

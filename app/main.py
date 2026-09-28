@@ -1,4 +1,4 @@
-
+from app.api.auth import router as auth_router
 from pathlib import Path
 import asyncio
 from app.database import (
@@ -10,16 +10,29 @@ from app.database import (
     delete_document,
 )
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
-
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi.responses import FileResponse, PlainTextResponse
 from app.services.document_pipeline import process_document
-
+from app.api.auth import get_current_user
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 app = FastAPI(
     title="Document Intelligence System",
     description="Backend API for the Document Intelligence System",
     version="1.0.0",
 )
+app.mount(
+    "/static",
+    StaticFiles(directory="frontend"),
+    name="static",
+)
+@app.get("/", include_in_schema=False)
+def home():
+    return FileResponse("frontend/index.html")
+app.include_router(auth_router)
+
+
 init_db()
 
 
@@ -32,7 +45,10 @@ def health_check():
 
 
 @app.post("/documents/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
 
     # Allowed document extensions
     allowed_extensions = {
@@ -88,6 +104,7 @@ async def upload_document(file: UploadFile = File(...)):
             validation_status=result["validation"]["status"],
             summary_validation_status=result["summary_validation"]["status"],
             summary_path=result["summary_path"],
+            summary_audio_path=result["summary_audio_path"],
             paraphrase_path=result["paraphrase_path"],
             audio_path=result["audio_path"],
         )
@@ -115,16 +132,20 @@ async def upload_document(file: UploadFile = File(...)):
         "audio_path": result["audio_path"],
         "summary_path": result["summary_path"],
         "paraphrase_path": result["paraphrase_path"],
+        
     }
 from app.database import get_all_documents
 
 
 @app.get("/documents")
-def get_documents():
+def get_documents(current_user=Depends(get_current_user)):
     return get_all_documents()
 
 @app.get("/documents/{document_id}")
-def get_document(document_id: int):
+def get_document(
+    document_id: int,
+    current_user=Depends(get_current_user),
+):
 
     document = get_document_by_id(document_id)
 
@@ -137,23 +158,101 @@ def get_document(document_id: int):
     return document
 
 @app.delete("/documents/{document_id}")
-def delete_document_endpoint(document_id: int):
+def delete_document_endpoint(
+    document_id: int,
+    current_user=Depends(get_current_user),
+):
+    document = get_document_by_id(document_id)
 
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    # Get all other documents so we don't delete files
+    # that are still being used by another database record.
+    all_documents = get_all_documents()
+
+    other_documents = [
+        item
+        for item in all_documents
+        if item["id"] != document_id
+    ]
+
+    path_fields = [
+        "file_path",
+        "summary_path",
+        "summary_audio_path",
+        "paraphrase_path",
+        "audio_path",
+    ]
+
+    # Collect all paths still referenced by other documents.
+    referenced_paths = set()
+
+    for other_document in other_documents:
+        for field in path_fields:
+            path_value = other_document.get(field)
+
+            if path_value:
+                referenced_paths.add(
+                    str(Path(path_value))
+                )
+
+    # Delete database record first.
     deleted = delete_document(document_id)
 
     if not deleted:
         raise HTTPException(
             status_code=404,
-            detail="Document not found"
+            detail="Document not found",
         )
 
-    return {
+    deleted_files = []
+    cleanup_warnings = []
+
+    # Remove files that are no longer referenced.
+    for field in path_fields:
+
+        path_value = document.get(field)
+
+        if not path_value:
+            continue
+
+        file_path = Path(path_value)
+
+        if str(file_path) in referenced_paths:
+            continue
+
+        if not file_path.exists():
+            continue
+
+        try:
+            file_path.unlink()
+            deleted_files.append(str(file_path))
+
+        except Exception as error:
+            cleanup_warnings.append(
+                f"Could not delete {file_path}: {error}"
+            )
+
+    response = {
         "message": "Document deleted successfully",
-        "document_id": document_id
+        "document_id": document_id,
+        "deleted_files": deleted_files,
     }
 
+    if cleanup_warnings:
+        response["cleanup_warnings"] = cleanup_warnings
+
+    return response
+
 @app.put("/documents/{document_id}/process")
-async def reprocess_document(document_id: int):
+async def reprocess_document(
+    document_id: int,
+    current_user=Depends(get_current_user),
+):
 
     document = get_document_by_id(document_id)
 
@@ -188,6 +287,7 @@ async def reprocess_document(document_id: int):
             validation_status=result["validation"]["status"],
             summary_validation_status=result["summary_validation"]["status"],
             summary_path=result["summary_path"],
+            summary_audio_path=result["summary_audio_path"],
             paraphrase_path=result["paraphrase_path"],
             audio_path=result["audio_path"],
         )
@@ -213,3 +313,116 @@ async def reprocess_document(document_id: int):
             status_code=500,
             detail=str(error)
         )
+
+@app.get("/documents/{document_id}/summary")
+def get_document_summary(
+    document_id: int,
+    current_user=Depends(get_current_user),
+):
+    document = get_document_by_id(document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    summary_path = Path(document["summary_path"])
+
+    if not summary_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Summary file not found",
+        )
+
+    return PlainTextResponse(
+        summary_path.read_text(encoding="utf-8")
+    )
+
+
+@app.get("/documents/{document_id}/paraphrase")
+def get_document_paraphrase(
+    document_id: int,
+    current_user=Depends(get_current_user),
+):
+    document = get_document_by_id(document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    paraphrase_path = Path(document["paraphrase_path"])
+
+    if not paraphrase_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Paraphrase file not found",
+        )
+
+    return PlainTextResponse(
+        paraphrase_path.read_text(encoding="utf-8")
+    )
+
+
+@app.get("/documents/{document_id}/audio")
+def get_document_audio(
+    document_id: int,
+    current_user=Depends(get_current_user),
+):
+    document = get_document_by_id(document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    audio_path = Path(document["audio_path"])
+
+    if not audio_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file not found",
+        )
+
+    return FileResponse(
+        audio_path,
+        media_type="audio/mpeg",
+        filename=audio_path.name,
+    )
+@app.get("/documents/{document_id}/summary-audio")
+def get_document_summary_audio(
+    document_id: int,
+    current_user=Depends(get_current_user),
+):
+    document = get_document_by_id(document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    summary_audio_path = document.get("summary_audio_path")
+
+    if not summary_audio_path:
+        raise HTTPException(
+            status_code=404,
+            detail="Summary audio has not been generated for this document",
+        )
+
+    audio_path = Path(summary_audio_path)
+
+    if not audio_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Summary audio file not found",
+        )
+
+    return FileResponse(
+        audio_path,
+        media_type="audio/mpeg",
+        filename=audio_path.name,
+    )
