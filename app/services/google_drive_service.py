@@ -287,6 +287,106 @@ def list_supported_files(service, page_size=100, exclude_folder_id=None):
     return files
 
 
+
+def list_all_drive_files_for_ui(
+    service,
+    exclude_folder_id=None,
+    page_size=100,
+):
+    """
+    List non-folder files for the UI.
+
+    Returns both supported and unsupported files.
+    Output folders and their descendants are excluded.
+    """
+
+    excluded_folder_ids = set()
+
+    if exclude_folder_id:
+        excluded_folder_ids = get_all_descendant_folder_ids(
+            service,
+            exclude_folder_id
+        )
+
+    query = (
+        "trashed = false "
+        "and mimeType != 'application/vnd.google-apps.folder'"
+    )
+
+    response = service.files().list(
+        q=query,
+        pageSize=page_size,
+        fields=(
+            "files("
+            "id,"
+            "name,"
+            "mimeType,"
+            "size,"
+            "parents,"
+            "webViewLink"
+            ")"
+        ),
+    ).execute()
+
+    files = []
+
+    for file in response.get("files", []):
+
+        parents = file.get("parents", [])
+
+        # Skip files inside excluded folders
+        if any(
+            parent_id in excluded_folder_ids
+            for parent_id in parents
+        ):
+            continue
+
+        mime_type = file.get("mimeType", "")
+        file_name = file.get("name", "")
+
+        # Google Workspace files are supported
+        workspace_supported = mime_type in {
+            "application/vnd.google-apps.document",
+            "application/vnd.google-apps.spreadsheet",
+            "application/vnd.google-apps.presentation",
+        }
+
+        extension_supported = (
+            Path(file_name).suffix.lower()
+            in SUPPORTED_EXTENSIONS
+        )
+
+        mime_supported = mime_type in {
+            "application/pdf",
+            "application/msword",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "text/csv",
+            "text/plain",
+            "application/vnd.ms-powerpoint",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "image/png",
+            "image/jpeg",
+        }
+
+        supported = (
+            workspace_supported
+            or extension_supported
+            or mime_supported
+        )
+
+        files.append({
+            **file,
+            "supported": supported,
+            "status": (
+                "Supported"
+                if supported
+                else "Unsupported file type"
+            ),
+        })
+
+    return files
+
 def export_google_workspace_file(
     service,
     file_id,

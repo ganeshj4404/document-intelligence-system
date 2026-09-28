@@ -13,6 +13,10 @@ const uploadMessage = document.getElementById("upload-message");
 const resultSection = document.getElementById("result-section");
 const resultTitle = document.getElementById("result-title");
 const resultContent = document.getElementById("result-content");
+const loadDriveButton = document.getElementById("load-drive-button");
+const driveFileSelect = document.getElementById("drive-file-select");
+const processDriveButton = document.getElementById("process-drive-button");
+const driveMessage = document.getElementById("drive-message");
 
 let currentAudioUrl = null;
 
@@ -720,3 +724,222 @@ async function playSummaryAudio(documentId) {
             `Error: ${error.message}`;
     }
 }
+// =========================
+// LOAD GOOGLE DRIVE FILES
+// =========================
+
+loadDriveButton.addEventListener(
+    "click",
+    async function () {
+
+        const token = localStorage.getItem("access_token");
+
+        if (!token) {
+            driveMessage.textContent =
+                "Please login again.";
+            return;
+        }
+
+        loadDriveButton.disabled = true;
+        loadDriveButton.textContent = "Loading...";
+        driveMessage.textContent =
+            "Loading files from Google Drive...";
+
+        try {
+
+            const response = await fetch(
+                "/drive/files",
+                {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.detail ||
+                    "Failed to load Google Drive files"
+                );
+            }
+
+            // Clear old options
+            driveFileSelect.innerHTML = `
+                <option value="">
+                    Select a Google Drive document
+                </option>
+            `;
+
+            if (!data.files || data.files.length === 0) {
+
+                driveMessage.textContent =
+                    "No supported Google Drive files found.";
+
+                return;
+            }
+
+            data.files.forEach(function (file) {
+
+                const option = document.createElement("option");
+
+                option.value = file.id;
+
+                option.dataset.fileName = file.name;
+
+                option.dataset.mimeType = file.mimeType;
+
+                option.dataset.supported =
+                    file.supported ? "true" : "false";
+
+                if (file.supported) {
+
+                    option.textContent = `✅ ${file.name}`;
+
+                } else {
+
+                    option.textContent =
+                        `❌ ${file.name} — Unsupported`;
+
+                    option.disabled = true;
+                }
+
+                driveFileSelect.appendChild(option);
+            });
+
+            driveMessage.textContent =
+                `${data.files.length} file(s) loaded from Google Drive.`;
+
+        } catch (error) {
+
+            console.error(
+                "Google Drive loading error:",
+                error
+            );
+
+            driveMessage.textContent =
+                `Error: ${error.message}`;
+
+        } finally {
+
+            loadDriveButton.disabled = false;
+            loadDriveButton.textContent =
+                "Load Drive Files";
+        }
+    }
+);
+
+// =========================
+// PROCESS GOOGLE DRIVE FILE
+// =========================
+
+processDriveButton.addEventListener(
+    "click",
+    async function () {
+
+        const token = localStorage.getItem("access_token");
+
+        if (!token) {
+            driveMessage.textContent =
+                "Please login again.";
+            return;
+        }
+
+        const selectedOption =
+            driveFileSelect.options[
+                driveFileSelect.selectedIndex
+            ];
+
+        if (
+            !selectedOption ||
+            !selectedOption.value
+        ) {
+            driveMessage.textContent =
+                "Please select a Google Drive document first.";
+            return;
+        }
+
+        const fileId =
+            selectedOption.value;
+
+        const fileName =
+            selectedOption.dataset.fileName;
+
+        const mimeType =
+            selectedOption.dataset.mimeType;
+
+        const supported =
+            selectedOption.dataset.supported === "true";
+
+        if (!supported) {
+
+            driveMessage.textContent =
+                "This file type is not supported for processing.";
+
+            return;
+        }
+
+        processDriveButton.disabled = true;
+        processDriveButton.textContent =
+            "Processing...";
+
+        driveMessage.textContent =
+            `Processing ${fileName} from Google Drive...`;
+
+        try {
+
+            const params = new URLSearchParams();
+
+            params.append("file_id", fileId);
+            params.append("file_name", fileName);
+            params.append("mime_type", mimeType);
+
+            const response = await fetch(
+                `/drive/process?${params.toString()}`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Authorization":
+                            `Bearer ${token}`
+                    }
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.detail ||
+                    "Google Drive processing failed"
+                );
+            }
+
+            driveMessage.textContent =
+                `${fileName} processed successfully.`;
+
+            // Refresh document list
+            await loadDocuments();
+
+            // Clear selection
+            driveFileSelect.value = "";
+
+        } catch (error) {
+
+            console.error(
+                "Google Drive processing error:",
+                error
+            );
+
+            driveMessage.textContent =
+                `Error: ${error.message}`;
+
+        } finally {
+
+            processDriveButton.disabled = false;
+            processDriveButton.textContent =
+                "Process Selected Drive File";
+        }
+    }
+);
