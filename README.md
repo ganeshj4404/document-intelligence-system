@@ -108,22 +108,24 @@ An end-to-end document intelligence application that ingests documents, extracts
                        Web Frontend
 
 
-Technology              Stack
+Technology Stack
 Component	            Technology
 Language	            Python
 API	                    FastAPI
 Database	            SQLite
 LLM	                    Ollama + Llama 3.2 3B
-PDF processing	        pypdf, pdfplumber, PyMuPDF
-DOCX processing	        python-docx
-Spreadsheet processing	pandas, openpyxl
-PPTX processing	        python-pptx
+PDF                     processing	pypdf, pdfplumber, PyMuPDF
+DOCX                    processing	python-docx
+Spreadsheet             processing	pandas, openpyxl
+PPTX                    processing	python-pptx
 OCR	                    Tesseract + pytesseract
 Image processing	    Pillow
 TTS	                    Edge TTS
 Authentication	        JWT + Argon2
 Frontend	            HTML, CSS, JavaScript
 Cloud storage	        Google Drive API
+
+
 
 ## Project Structure
 
