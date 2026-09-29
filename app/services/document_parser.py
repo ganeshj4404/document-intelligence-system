@@ -11,6 +11,23 @@ import pymupdf
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from io import BytesIO
 
+# -------------------------------------------------
+# Local Tesseract Configuration
+# -------------------------------------------------
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+LOCAL_TESSERACT_PATH = (
+    PROJECT_ROOT
+    / "tesseract"
+    / "tesseract.exe"
+)
+
+if LOCAL_TESSERACT_PATH.exists():
+    pytesseract.pytesseract.tesseract_cmd = str(
+        LOCAL_TESSERACT_PATH
+    )
+
 
 def classify_ocr_token(word):
     """
