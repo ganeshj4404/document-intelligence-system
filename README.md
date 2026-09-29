@@ -125,7 +125,24 @@ Authentication	        JWT + Argon2
 Frontend	            HTML, CSS, JavaScript
 Cloud storage	        Google Drive API
 
+## Environment Setup
 
+This project includes a setup script that prepares the local environment for the Document Intelligence System.
+
+### Requirements
+
+- Windows 10/11
+- Python 3.13+
+- Git
+- Ollama installed and available in the system PATH
+- Google Drive credentials for Google Drive integration
+
+### Automated Setup
+
+From the project root, activate the virtual environment and run:
+
+```powershell
+python scripts/setup_environment.py
 
 ## Project Structure
 
@@ -138,7 +155,9 @@ document-intelligence-system/
 │   └── main.py           # FastAPI application
 │
 ├── frontend/             # HTML, CSS and JavaScript UI
-├── tests/                # Test and setup scripts
+├── tests/                # Tests
+├── scripts/              # Environment setup scripts
+│   └── setup_environment.py
 ├── data/                 # Local input and generated files
 ├── credentials/          # Google credentials (not committed)
 ├── .env                  # Environment variables (not committed)
