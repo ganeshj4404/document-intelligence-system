@@ -144,6 +144,15 @@ From the project root, activate the virtual environment and run:
 ```powershell
 python scripts/setup_environment.py
 
+## Running the Application
+
+### Local Application
+
+Activate the virtual environment and run:
+
+```powershell
+uvicorn app.main:app --reload
+
 ## Project Structure
 
 document-intelligence-system/
