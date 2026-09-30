@@ -143,6 +143,8 @@ From the project root, activate the virtual environment and run:
 
 ```powershell
 python scripts/setup_environment.py
+```
+
 
 ## Running the Application
 
