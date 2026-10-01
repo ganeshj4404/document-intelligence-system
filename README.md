@@ -154,6 +154,7 @@ Activate the virtual environment and run:
 
 ```powershell
 uvicorn app.main:app --reload
+```
 
 ## Project Structure
 
