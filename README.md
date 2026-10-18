@@ -127,7 +127,7 @@ Cloud storage	        Google Drive API
 
 ## Environment Setup
 
-This project includes a setup script that prepares the local environment for the Document Intelligence System.
+This project includes a setup script to install Python dependencies, configure Tesseract OCR, and prepare the local AI model.
 
 ### Requirements
 
@@ -135,15 +135,41 @@ This project includes a setup script that prepares the local environment for the
 - Python 3.13+
 - Git
 - Ollama installed and available in the system PATH
-- Google Drive credentials for Google Drive integration
+- Google Drive credentials (only required for Google Drive integration)
 
-### Automated Setup
+### 1. Clone the repository
 
-From the project root, activate the virtual environment and run:
+```powershell
+git clone https://github.com/ganeshj4404/document-intelligence-system.git
+cd document-intelligence-system
+```
+
+### 2. Create and activate a virtual environment
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+### 3. Run the environment setup script
+
+Install Ollama separately before running this script.
 
 ```powershell
 python scripts/setup_environment.py
 ```
+
+The script installs Python dependencies, installs Tesseract OCR into the project folder if needed, starts Ollama, and downloads the required `llama3.2:3b` model if it is not already installed.
+
+### 4. Configure environment variables
+
+Create your own `.env` file from the example:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Edit `.env` and configure your own JWT secret and Google Drive OAuth credentials if you use Google Drive integration. Never share your real `.env` file or credentials.
 
 
 ## Running the Application

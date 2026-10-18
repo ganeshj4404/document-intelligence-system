@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import json
 import urllib.request
 
 
@@ -54,98 +55,92 @@ def install_python_dependencies() -> None:
 
     print("✅ Python dependencies installed.")
 
-
 # -------------------------------------------------
-# Start Ollama with project-local models directory
+# Ollama Configuration
 # -------------------------------------------------
 
 def start_ollama() -> None:
+    """Start Ollama if its local API is not already available."""
 
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    print("\nChecking Ollama server...")
 
-    env = os.environ.copy()
-    env["OLLAMA_MODELS"] = str(MODELS_DIR)
+    # Reuse an existing Ollama server when available.
+    try:
+        with urllib.request.urlopen(
+            f"{OLLAMA_HOST}/api/tags", timeout=3
+        ):
+            print("Ollama server is already running.")
+            return
+    except Exception:
+        pass
 
-    print("\nStarting Ollama with project-local model storage...")
-    print(f"Model directory: {MODELS_DIR}")
+    # Start Ollama using its normal model-storage configuration.
+    try:
+        subprocess.Popen(
+            ["ollama", "serve"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(
+                subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+            ),
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "Ollama is not installed or is not on PATH. "
+            "Install Ollama before continuing."
+        ) from exc
 
-    subprocess.Popen(
-        ["ollama", "serve"],
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-    )
-
-    # Give the server a few seconds to start.
-    for _ in range(15):
+    for _ in range(20):
         try:
-            result = subprocess.run(
-                [
-                    "powershell.exe",
-                    "-NoProfile",
-                    "-Command",
-                    (
-                        "try { "
-                        "Invoke-WebRequest "
-                        f"-Uri '{OLLAMA_HOST}/api/tags' "
-                        "-UseBasicParsing "
-                        "-TimeoutSec 2 | Out-Null; "
-                        "exit 0 "
-                        "} catch { exit 1 }"
-                    ),
-                ],
-                capture_output=True,
-            )
-
-            if result.returncode == 0:
-                print("✅ Ollama server is running.")
+            with urllib.request.urlopen(
+                f"{OLLAMA_HOST}/api/tags", timeout=2
+            ):
+                print("Ollama server started successfully.")
                 return
-
         except Exception:
-            pass
-
-        time.sleep(1)
+            time.sleep(1)
 
     raise RuntimeError(
-        "Ollama server did not start within the expected time."
+        "Ollama did not start. Open Ollama manually and try again."
     )
-
 
 # -------------------------------------------------
 # Ensure required Ollama model exists
 # -------------------------------------------------
-
 def setup_ollama_model() -> None:
+    """Download the required model if it is not already available."""
 
     print(f"\nChecking Ollama model: {OLLAMA_MODEL}")
 
-    env = os.environ.copy()
-    env["OLLAMA_MODELS"] = str(MODELS_DIR)
+    try:
+        with urllib.request.urlopen(
+            f"{OLLAMA_HOST}/api/tags", timeout=5
+        ) as response:
+            data = json.load(response)
+    except Exception as exc:
+        raise RuntimeError(
+            "Cannot connect to Ollama. Make sure Ollama is running."
+        ) from exc
 
-    result = subprocess.run(
-        ["ollama", "list"],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    installed_models = [
+        model.get("name", "")
+        for model in data.get("models", [])
+    ]
 
-    if OLLAMA_MODEL in result.stdout:
-        print(f"✅ {OLLAMA_MODEL} is already available.")
+    if any(
+        name == OLLAMA_MODEL
+        or name.startswith(OLLAMA_MODEL + "-")
+        for name in installed_models
+    ):
+        print(f"{OLLAMA_MODEL} is already available.")
         return
 
-    print(f"{OLLAMA_MODEL} not found.")
     print(f"Downloading {OLLAMA_MODEL}...")
-
     subprocess.run(
         ["ollama", "pull", OLLAMA_MODEL],
-        env=env,
         check=True,
     )
-
-    print(f"✅ {OLLAMA_MODEL} downloaded successfully.")
-
+    print(f"{OLLAMA_MODEL} downloaded successfully.")
 
 # -------------------------------------------------
 # Tesseract version
